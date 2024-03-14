@@ -24,6 +24,23 @@ string_to_integer = { ch:i for i, ch in enumerate(chars) }
 integer_to_string = { i:ch for i, ch in enumerate(chars) }
 
 #ENCODER: take a string, output a list of integers
-encode = lambda s: [ string_to_integer(ch) for ch in s ]
+encode = lambda s: [ string_to_integer[ch] for ch in s ]
 #DECODER: take a list of integers, output a string
-decode = lambda l: [ ''.join([integer_to_string(i) for i in l]) ]
+decode = lambda l: [ ''.join([integer_to_string[i] for i in l]) ]
+
+print(f"[-] Test encoder: hello world! = {encode("hello world!")}")
+print(f"[-] Test encoder: Hello World! = {encode("Hello World!")}")
+
+print(f"[-] Test decoder: hellow world! = {decode(encode("hello world!"))}")
+print(f"[-] Test decoder: hellow world! = {decode(encode("Hello World!"))}")
+
+
+# TOKENIZE DATASET
+import torch
+
+data = torch.tensor(encode(text), dtype=torch.long)
+
+print(data.shape, data.dtype)
+print(data[:1000])
+# --------------------------
+
