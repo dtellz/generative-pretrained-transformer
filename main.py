@@ -1,5 +1,8 @@
 """ microGPT """
 import os
+import torch
+import torch.nn as nn
+from torch.nn import functional as F
 
 with open('input-dataset.txt', 'r', encoding='utf-8') as file:
     text = file.read()
@@ -14,7 +17,8 @@ print(text[:1000] + '\n')
 # Extract all the unique characters that occur in this text:
 
 chars = sorted(list(set(text)))
-print(f"[-] Unique characters: ({len(chars)})\n {''.join(chars)} \n")
+vocab_size = len(chars)
+print(f"[-] Unique characters: ({vocab_size})\n {''.join(chars)} \n")
 
 # TOKENIZER (character level)
 
@@ -36,7 +40,7 @@ print(f"[-] Test decoder: hellow world! = {decode(encode("Hello World!"))}")
 
 
 # TOKENIZE DATASET
-import torch
+
 
 data = torch.tensor(encode(text), dtype=torch.long)
 
@@ -57,6 +61,8 @@ train_data[:block_size+1]
 torch.manual_seed(1337)
 batch_size = 4 # independet parallel sequences
 
+# DATA CHUNK LOADER
+
 def get_batch(split):
     data = train_data if split == 'train' else val_data
     ix = torch.randint(len(data) - block_size, (batch_size,))
@@ -76,7 +82,74 @@ for b in range(batch_size):
         target = yb[b, t]
         print(f'[-] Context: {context.tolist()} -> Target: {target}')
 
+# BIGRAM LANGUAGE MODEL
+        
+class BigramLanguageModel(nn.Module):
 
+    def __init__(self, vocab_size):
+        super().__init__()
+        # each token directly reads off the logits for the next token from a lookup table
+        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+
+    def forward(self, idx, targets=None):
+
+        # idx and targets are both (B, T) tensor of integers
+        logits = self.token_embedding_table(idx) # (Batch, Time, Channel)
+
+        if targets is None:
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F. cross_entropy(logits, targets)
+
+        return logits, loss
+
+    def generate(self, idx, max_new_tokens):
+        for _ in range(max_new_tokens):
+            # get predictions
+            logits, loss = self(idx)
+            #focus only in the last time step
+            logits = logits[:, -1, :] # Becomes (B, C)
+            # apply softmax to get probabilities
+            probs = F.softmax(logits, dim=-1)
+            # sample from the distribution
+            sample = torch.multinomial(probs, num_samples=1)
+            # append to the sequence
+            idx = torch.cat((idx, sample), dim=1)
+        return idx
+
+
+m = BigramLanguageModel(vocab_size)
+logits, loss = m(xb, yb)
+# DATASET SIZE
+print(logits.shape, loss)
+
+
+print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist()))
+
+
+
+# TRAINING
+
+#create a pytorch optimizer
+optimizer = torch.optim.Adam(m.parameters(), lr=1e-3)
+
+batch_size = 32
+for steps in range(10000):
+    #sample batch of data
+    xb, yb = get_batch('train')
+
+    #evaluate the loss
+    logits, loss = m(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+print(loss.item())
+
+print(decode(m.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=300)[0].tolist()))
 
 
 
