@@ -75,6 +75,21 @@ def get_batch(split):
     x, y = x.to(device) , y.to(device)
     return x, y
 
+@torch.no_grad()
+def estimate_loss():
+    out = {}
+    eval_iters = 1000
+    model.eval()
+    for split in ['train', 'val']:
+        losses = torch.zeros(eval_iters, device=device)
+        for k in range(eval_iters):
+            xb, yb = get_batch(split)
+            _, loss = model(xb, yb)
+            losses[k] = loss.item()
+        out[split] = losses.mean()
+    model.train()
+    return out
+
 xb, yb, = get_batch('train')
 print('--------------------------')
 print(f'[-] Input batch shape: {xb.shape} \n {xb}')
@@ -134,7 +149,7 @@ logits, loss = model(xb, yb)
 print(logits.shape, loss)
 
 
-print(f'[-] AFTER training generation: {decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long), max_new_tokens=100)[0].tolist())}')
+print(f'[-] pre-training generation: {decode(model.generate(idx = torch.zeros((1, 1), dtype=torch.long, device=device), max_new_tokens=100)[0].tolist())}')
 
 
 
@@ -144,7 +159,14 @@ print(f'[-] AFTER training generation: {decode(model.generate(idx = torch.zeros(
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 batch_size = 32
-for steps in range(10000):
+max_iters = 10000
+eval_interval = 300
+for iter in range(max_iters):
+
+    if iter % eval_interval == 0:
+        losses = estimate_loss()
+        print(f'[-] Step: {iter}, Train loss: {losses["train"]}, Val loss: {losses["val"]}')
+
     #sample batch of data
     xb, yb = get_batch('train')
 
